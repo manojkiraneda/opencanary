@@ -52,6 +52,7 @@ requirements = [
     "hpfeeds==3.0.0",
     "pyOpenSSL==22.1.0",
     "service-identity==21.1.0",
+    "dbus-python==1.4.0",
 ]
 
 setup(

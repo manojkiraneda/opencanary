@@ -9,6 +9,7 @@ from datetime import datetime
 from logging.handlers import SocketHandler
 from twisted.internet import reactor
 import requests
+import dbus
 
 from opencanary.iphelper import check_ip
 
@@ -247,6 +248,50 @@ class HpfeedsHandler(logging.Handler):
             self.hpc.publish(self.channels, msg)
         except:  # noqa: E722
             print("Error on publishing to server")
+
+
+class PELHandler(logging.Handler):
+    def __init__(self):
+        logging.Handler.__init__(self)
+        try:
+            self.bus = dbus.SystemBus()
+            self.log_obj = self.bus.get_object(
+                'xyz.openbmc_project.Logging', '/xyz/openbmc_project/logging'
+            )
+            self.create_iface = dbus.Interface(
+                self.log_obj, 'xyz.openbmc_project.Logging.Create'
+            )
+        except dbus.DBusException as e:
+            print("Failed to connect to D-Bus or get logging interface:", e)
+            self.create_iface = None
+
+    def emit(self, record):
+        if self.create_iface is None:
+            return  # Skip if D-Bus setup failed
+
+        try:
+            # Format the message
+            message = self.format(record)
+            try:
+                data = json.loads(record.msg)
+            except Exception:
+                data = {"message": message}
+
+            # Ensure data is a dictionary of strings
+            pel_data = {}
+            for k, v in data.items():
+                try:
+                    pel_data[str(k)] = str(v)
+                except Exception:
+                    pass
+
+            self.create_iface.Create(
+                'xyz.openbmc_project.OpenCanary.Alert',
+                'xyz.openbmc_project.Logging.Entry.Level.Critical',
+                pel_data,
+            )
+        except dbus.DBusException as e:
+            print("Failed to create PEL entry via D-Bus:", e)
 
 
 class SlackHandler(logging.Handler):
